@@ -6,9 +6,15 @@ on:
   pull_request:
     branches: [ "master" ]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
 
     strategy:
       matrix:
@@ -40,7 +46,7 @@ jobs:
         zip -ur function.zip node_modules
     
     - name: Upload artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: function-artifact
         path: function.zip
