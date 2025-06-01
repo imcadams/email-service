@@ -8,13 +8,52 @@ on:
 
 permissions:
   contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ENVIRONMENT: prod
 
 jobs:
-  build:
+  deploy-infrastructure:
+    runs-on: ubuntu-latest
+    outputs:
+      function-name: ${{ steps.cfn-outputs.outputs.function-name }}
+      role-arn: ${{ steps.cfn-outputs.outputs.role-arn }}
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_BOOTSTRAP_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Deploy CloudFormation stack
+        run: |
+          aws cloudformation deploy \
+            --template-file aws/template.yml \
+            --stack-name email-service-${{ env.ENVIRONMENT }} \
+            --parameter-overrides \
+              Environment=${{ env.ENVIRONMENT }} \
+              GithubOrg=${{ github.repository_owner }} \
+              GithubRepo=${{ github.event.repository.name }} \
+            --capabilities CAPABILITY_IAM
+      
+      - name: Get CloudFormation outputs
+        id: cfn-outputs
+        run: |
+          STACK_NAME="email-service-${{ env.ENVIRONMENT }}"
+          echo "function-name=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`LambdaFunctionName`].OutputValue' --output text)" >> $GITHUB_OUTPUT
+          echo "role-arn=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`GitHubActionsRoleArn`].OutputValue' --output text)" >> $GITHUB_OUTPUT
+
+  build-and-deploy:
+    needs: deploy-infrastructure
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+      id-token: write
 
     strategy:
       matrix:
@@ -51,15 +90,15 @@ jobs:
         name: function-artifact
         path: function.zip
         
-    # Uncomment the following steps when ready to deploy to AWS
-    # - name: Configure AWS credentials
-    #   uses: aws-actions/configure-aws-credentials@v2
-    #   with:
-    #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-    #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-    #     aws-region: ${{ secrets.AWS_REGION }}
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        role-to-assume: ${{ needs.deploy-infrastructure.outputs.role-arn }}
+        aws-region: ${{ env.AWS_REGION }}
     
-    # - name: Deploy to Lambda
-    #   if: github.ref == 'refs/heads/master'
-    #   run: |
-    #     aws lambda update-function-code --function-name YOUR_LAMBDA_FUNCTION_NAME --zip-file fileb://function.zip
+    - name: Deploy to Lambda
+      if: github.ref == 'refs/heads/master'
+      run: |
+        aws lambda update-function-code \
+          --function-name ${{ needs.deploy-infrastructure.outputs.function-name }} \
+          --zip-file fileb://function.zip
