@@ -54,6 +54,8 @@ Resources:
             Condition:
               StringLike:
                 token.actions.githubusercontent.com:sub: !Sub repo:${GithubOrg}/${GithubRepo}:*
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
       Policies:
         - PolicyName: LambdaDeployment
           PolicyDocument:

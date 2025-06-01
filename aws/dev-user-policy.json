@@ -64,7 +64,12 @@
                 "iam:PutRolePolicy",
                 "iam:UpdateRole",
                 "iam:AttachRolePolicy",
-                "iam:DetachRolePolicy"
+                "iam:DetachRolePolicy",
+                "iam:ListOpenIDConnectProviders",
+                "iam:GetOpenIDConnectProvider",
+                "iam:CreateOpenIDConnectProvider",
+                "iam:DeleteOpenIDConnectProvider",
+                "iam:TagOpenIDConnectProvider"
             ],
             "Resource": "*"
         },
