@@ -1,0 +1,79 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "lambda:*"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ses:*"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "s3:*"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "cloudfront:*"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "wafv2:*"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "apigateway:*"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "logs:*",
+                "cloudwatch:*"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "iam:GetRole",
+                "iam:GetRolePolicy",
+                "iam:ListRoles",
+                "iam:ListRolePolicies",
+                "iam:ListAttachedRolePolicies",
+                "iam:CreateRole",
+                "iam:DeleteRole",
+                "iam:PutRolePolicy",
+                "iam:UpdateRole",
+                "iam:AttachRolePolicy",
+                "iam:DetachRolePolicy"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "cloudformation:*"
+            ],
+            "Resource": "*"
+        }
+    ]
+}

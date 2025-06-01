@@ -82,6 +82,52 @@ Resources:
       Timeout: 30
       MemorySize: 128
 
+  EmailApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub email-service-api-${Environment}
+      Description: API Gateway for Email Service
+
+  EmailApiResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref EmailApi
+      ParentId: !GetAtt EmailApi.RootResourceId
+      PathPart: "email"
+
+  EmailApiMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref EmailApi
+      ResourceId: !Ref EmailApiResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${EmailFunction.Arn}/invocations
+
+  EmailApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: EmailApiMethod
+    Properties:
+      RestApiId: !Ref EmailApi
+
+  EmailApiStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref EmailApi
+      DeploymentId: !Ref EmailApiDeployment
+      StageName: !Ref Environment
+
+  LambdaApiGatewayPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt EmailFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${EmailApi}/*/${Environment}/email
+
 Outputs:
   LambdaFunctionName:
     Description: Name of the Lambda function
@@ -92,3 +138,6 @@ Outputs:
   GitHubActionsRoleArn:
     Description: ARN of the GitHub Actions role
     Value: !GetAtt GitHubActionsRole.Arn
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub https://${EmailApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/email

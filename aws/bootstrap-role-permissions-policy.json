@@ -19,7 +19,12 @@
                 "iam:GetRolePolicy",
                 "iam:TagRole",
                 "iam:UntagRole",
-                "iam:UpdateRole"
+                "iam:UpdateRole",
+                "iam:AttachRolePolicy",
+                "iam:DetachRolePolicy",
+                "iam:ListRolePolicies",
+                "iam:ListAttachedRolePolicies",
+                "iam:PassRole"
             ],
             "Resource": [
                 "arn:aws:iam::*:role/email-service-*"
@@ -39,6 +44,14 @@
             "Resource": [
                 "arn:aws:lambda:*:*:function:email-service-*"
             ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "iam:GetPolicy",
+                "iam:GetPolicyVersion"
+            ],
+            "Resource": "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
         }
     ]
 }
