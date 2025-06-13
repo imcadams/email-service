@@ -41,7 +41,8 @@
                 "lambda:TagResource",
                 "lambda:UntagResource",
                 "lambda:AddPermission",
-                "lambda:RemovePermission"
+                "lambda:RemovePermission",
+                "lambda:InvokeFunction"
             ],
             "Resource": [
                 "arn:aws:lambda:*:*:function:email-service-*"
