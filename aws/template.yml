@@ -149,7 +149,7 @@ Resources:
 
   ApiKey:
     Type: AWS::ApiGateway::ApiKey
-    DependsOn: EmailApiDeployment
+    DependsOn: EmailApiStage # Corrected: Added dependency on the API Stage
     Properties:
       Name: !Sub email-service-apikey-${Environment}
       Description: API Key for Email Service
@@ -160,6 +160,7 @@ Resources:
 
   UsagePlan:
     Type: AWS::ApiGateway::UsagePlan
+    DependsOn: EmailApiStage # Corrected: Added dependency on the API Stage
     Properties:
       ApiStages:
         - ApiId: !Ref EmailApi
@@ -169,6 +170,9 @@ Resources:
 
   UsagePlanKey:
     Type: AWS::ApiGateway::UsagePlanKey
+    DependsOn: # Added for good practice to ensure UsagePlan and ApiKey exist first
+      - UsagePlan
+      - ApiKey
     Properties:
       KeyId: !Ref ApiKey
       KeyType: API_KEY
@@ -197,17 +201,17 @@ Resources:
             try {
               const apigateway = new AWS.APIGateway();
               const secretsManager = new AWS.SecretsManager();
-              
+
               const apiKey = await apigateway.getApiKey({
                 apiKey: event.ResourceProperties.apiKeyId,
                 includeValue: true
               }).promise();
-              
+
               await secretsManager.putSecretValue({
                 SecretId: event.ResourceProperties.secretName,
                 SecretString: JSON.stringify({ apikey: apiKey.value })
               }).promise();
-              
+
               await response.send(event, context, response.SUCCESS, {});
             } catch (error) {
               console.error(error);
