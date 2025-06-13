@@ -47,7 +47,8 @@ Resources:
               - Effect: Allow
                 Action:
                   - apigateway:GET
-                Resource: !Sub "arn:aws:apigateway:${AWS::Region}::/apikeys/${ApiKey}"
+                # Corrected: Using a wildcard to break the circular dependency loop.
+                Resource: !Sub "arn:aws:apigateway:${AWS::Region}::/apikeys/*"
               - Effect: Allow
                 Action:
                   - secretsmanager:PutSecretValue
@@ -161,7 +162,7 @@ Resources:
 
   ApiKey:
     Type: AWS::ApiGateway::ApiKey
-    DependsOn: EmailApiStage # Corrected: Added dependency on the API Stage
+    DependsOn: EmailApiStage
     Properties:
       Name: !Sub email-service-apikey-${Environment}
       Description: API Key for Email Service
@@ -172,7 +173,7 @@ Resources:
 
   UsagePlan:
     Type: AWS::ApiGateway::UsagePlan
-    DependsOn: EmailApiStage # Corrected: Added dependency on the API Stage
+    DependsOn: EmailApiStage
     Properties:
       ApiStages:
         - ApiId: !Ref EmailApi
@@ -182,7 +183,7 @@ Resources:
 
   UsagePlanKey:
     Type: AWS::ApiGateway::UsagePlanKey
-    DependsOn: # Added for good practice to ensure UsagePlan and ApiKey exist first
+    DependsOn:
       - UsagePlan
       - ApiKey
     Properties:
@@ -211,50 +212,23 @@ Resources:
           const AWS = require('aws-sdk');
           const response = require('cfn-response');
           exports.handler = async (event, context) => {
+            // Corrected: Added handler for Delete requests to prevent stuck stacks.
+            if (event.RequestType === 'Delete') {
+              await response.send(event, context, response.SUCCESS, {});
+              return;
+            }
             try {
               const apigateway = new AWS.APIGateway();
               const secretsManager = new AWS.SecretsManager();
-
+              
               const apiKey = await apigateway.getApiKey({
                 apiKey: event.ResourceProperties.apiKeyId,
                 includeValue: true
               }).promise();
-
+              
               await secretsManager.putSecretValue({
                 SecretId: event.ResourceProperties.secretName,
                 SecretString: JSON.stringify({ apikey: apiKey.value })
               }).promise();
-
-              await response.send(event, context, response.SUCCESS, {});
-            } catch (error) {
-              console.error(error);
-              await response.send(event, context, response.FAILED, {});
-            }
-          };
-
-  UpdateApiKeySecret:
-    Type: Custom::ApiKeySecretUpdate
-    Properties:
-      ServiceToken: !GetAtt ApiKeySecretUpdate.Arn
-      apiKeyId: !Ref ApiKey
-      secretName: !Ref ApiKeySecret
-
-Outputs:
-  LambdaFunctionName:
-    Description: Name of the Lambda function
-    Value: !Ref EmailFunction
-  LambdaFunctionArn:
-    Description: ARN of the Lambda function
-    Value: !GetAtt EmailFunction.Arn
-  GitHubActionsRoleArn:
-    Description: ARN of the GitHub Actions role
-    Value: !GetAtt GitHubActionsRole.Arn
-  ApiEndpoint:
-    Description: API Gateway endpoint URL
-    Value: !Sub https://${EmailApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/email
-  ApiKey:
-    Description: API Key Value
-    Value: !GetAtt ApiKey.APIKeyId
-  ApiKeyValue:
-    Description: API Key Secret Value
-    Value: !Sub '{{resolve:secretsmanager:${ApiKey}:SecretString:APIKey}}'
+              
+              await response.send(event, context, response.
