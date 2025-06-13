@@ -47,7 +47,6 @@ Resources:
               - Effect: Allow
                 Action:
                   - apigateway:GET
-                # Corrected: Using a wildcard to break the circular dependency loop.
                 Resource: !Sub "arn:aws:apigateway:${AWS::Region}::/apikeys/*"
               - Effect: Allow
                 Action:
@@ -88,6 +87,7 @@ Resources:
   EmailFunction:
     Type: AWS::Lambda::Function
     Properties:
+      # Corrected: Removed FunctionName to let CloudFormation generate a unique name.
       Runtime: nodejs18.x
       Handler: index.handler
       Role: !GetAtt LambdaExecutionRole.Arn
@@ -163,8 +163,8 @@ Resources:
     Type: AWS::ApiGateway::ApiKey
     DependsOn: EmailApiStage
     Properties:
-      Name: !Sub email-service-apikey-${Environment}
-      Description: API Key for Email Service
+      # Corrected: Removed Name and used Description for human-readable identification.
+      Description: !Sub "API Key for Email Service (${Environment})"
       Enabled: true
       StageKeys:
         - RestApiId: !Ref EmailApi
@@ -211,7 +211,6 @@ Resources:
           const AWS = require('aws-sdk');
           const response = require('cfn-response');
           exports.handler = async (event, context) => {
-            // Corrected: Added handler for Delete requests to prevent stuck stacks.
             if (event.RequestType === 'Delete') {
               await response.send(event, context, response.SUCCESS, {});
               return;
@@ -230,4 +229,36 @@ Resources:
                 SecretString: JSON.stringify({ apikey: apiKey.value })
               }).promise();
               
-              await response.send(event, context, response.
+              await response.send(event, context, response.SUCCESS, {});
+            } catch (error) {
+              console.error(error);
+              await response.send(event, context, response.FAILED, {});
+            }
+          };
+
+  UpdateApiKeySecret:
+    Type: Custom::ApiKeySecretUpdate
+    Properties:
+      ServiceToken: !GetAtt ApiKeySecretUpdate.Arn
+      apiKeyId: !Ref ApiKey
+      secretName: !Ref ApiKeySecret
+
+Outputs:
+  LambdaFunctionName:
+    Description: Name of the Lambda function
+    Value: !Ref EmailFunction
+  LambdaFunctionArn:
+    Description: ARN of the Lambda function
+    Value: !GetAtt EmailFunction.Arn
+  GitHubActionsRoleArn:
+    Description: ARN of the GitHub Actions role
+    Value: !GetAtt GitHubActionsRole.Arn
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub https://${EmailApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/email
+  ApiKey:
+    Description: API Key Value
+    Value: !GetAtt ApiKey.APIKeyId
+  ApiKeyValue:
+    Description: API Key Secret Value
+    Value: !Sub '{{resolve:secretsmanager:${ApiKey}:SecretString:APIKey}}'
