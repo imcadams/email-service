@@ -31,32 +31,14 @@ jobs:
       
       - name: Deploy CloudFormation stack
         run: |
-          # Check if stack exists
-          if ! aws cloudformation describe-stacks --stack-name email-service-${{ env.ENVIRONMENT }} 2>/dev/null; then
-            # Create stack with rollback configuration
-            aws cloudformation create-stack \
-              --stack-name email-service-${{ env.ENVIRONMENT }} \
-              --template-body file://aws/template.yml \
-              --parameters \
-                ParameterKey=Environment,ParameterValue=${{ env.ENVIRONMENT }} \
-                ParameterKey=GithubOrg,ParameterValue=${{ github.repository_owner }} \
-                ParameterKey=GithubRepo,ParameterValue=${{ github.event.repository.name }} \
-              --capabilities CAPABILITY_IAM \
-              --on-failure DELETE
-            # Wait for stack creation to complete
-            aws cloudformation wait stack-create-complete --stack-name email-service-${{ env.ENVIRONMENT }}
-          else
-            # Update existing stack
-            aws cloudformation deploy \
-              --template-file aws/template.yml \
-              --stack-name email-service-${{ env.ENVIRONMENT }} \
-              --parameter-overrides \
-                Environment=${{ env.ENVIRONMENT }} \
-                GithubOrg=${{ github.repository_owner }} \
-                GithubRepo=${{ github.event.repository.name }} \
-              --capabilities CAPABILITY_IAM \
-              --no-fail-on-empty-changeset
-          fi
+          aws cloudformation deploy \
+            --template-file aws/template.yml \
+            --stack-name email-service-${{ env.ENVIRONMENT }} \
+            --parameter-overrides \
+              Environment=${{ env.ENVIRONMENT }} \
+              GithubOrg=${{ github.repository_owner }} \
+              GithubRepo=${{ github.event.repository.name }} \
+            --capabilities CAPABILITY_IAM
       
       - name: Get CloudFormation outputs
         id: cfn-outputs
