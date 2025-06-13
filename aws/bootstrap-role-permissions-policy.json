@@ -66,6 +66,19 @@
                 "iam:GetPolicyVersion"
             ],
             "Resource": "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "secretsmanager:CreateSecret",
+                "secretsmanager:PutSecretValue",
+                "secretsmanager:UpdateSecret",
+                "secretsmanager:GetSecretValue",
+                "secretsmanager:DeleteSecret"
+            ],
+            "Resource": [
+                "arn:aws:secretsmanager:*:*:secret:email-service-*"
+            ]
         }
     ]
 }
