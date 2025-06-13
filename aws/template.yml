@@ -208,6 +208,10 @@ Resources:
         ZipFile: |
           const https = require('https');
           const url = require('url');
+          // Corrected: Uses AWS SDK v3, which is included in the Node.js 18 runtime.
+          const { APIGatewayClient, GetApiKeyCommand } = require("@aws-sdk/client-api-gateway");
+          const { SecretsManagerClient, PutSecretValueCommand } = require("@aws-sdk/client-secrets-manager");
+
           exports.handler = async (event, context) => {
             const sendResponse = (status, responseData) => {
               return new Promise((resolve, reject) => {
@@ -234,23 +238,29 @@ Resources:
                 request.end();
               });
             };
+            
             if (event.RequestType === 'Delete') {
               await sendResponse("SUCCESS", {});
               return;
             }
+            
             try {
-              const AWS = require('aws-sdk');
-              const apigateway = new AWS.APIGateway();
-              const secretsManager = new AWS.SecretsManager();
-              const apiKey = await apigateway.getApiKey({
-                apiKey: event.ResourceProperties.apiKeyId,
-                includeValue: true
-              }).promise();
-              await secretsManager.putSecretValue({
-                SecretId: event.ResourceProperties.secretName,
-                SecretString: JSON.stringify({ apikey: apiKey.value })
-              }).promise();
-              await sendResponse("SUCCESS", { ApiKeyValue: apiKey.value });
+              const apigatewayClient = new APIGatewayClient({});
+              const secretsManagerClient = new SecretsManagerClient({});
+
+              const getApiKeyResponse = await apigatewayClient.send(
+                new GetApiKeyCommand({ apiKey: event.ResourceProperties.apiKeyId, includeValue: true })
+              );
+              const apiKeyValue = getApiKeyResponse.value;
+
+              await secretsManagerClient.send(
+                new PutSecretValueCommand({
+                  SecretId: event.ResourceProperties.secretName,
+                  SecretString: JSON.stringify({ apikey: apiKeyValue })
+                })
+              );
+
+              await sendResponse("SUCCESS", { ApiKeyValue: apiKeyValue });
             } catch (error) {
               console.error("Caught an error:", error);
               await sendResponse("FAILED", { Error: error.message });
