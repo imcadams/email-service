@@ -199,6 +199,7 @@ Resources:
       GenerateSecretString:
         SecretStringTemplate: '{}'
         GenerateStringKey: "apikey"
+      ForceDeleteWithoutRecovery: true
 
   ApiKeySecretUpdate:
     Type: AWS::Lambda::Function
