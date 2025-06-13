@@ -40,6 +40,18 @@ Resources:
                   - ses:SendEmail
                   - ses:SendRawEmail
                 Resource: '*'
+        - PolicyName: ApiKeySecretUpdatePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - apigateway:GET
+                Resource: !Sub "arn:aws:apigateway:${AWS::Region}::/apikeys/${ApiKey}"
+              - Effect: Allow
+                Action:
+                  - secretsmanager:PutSecretValue
+                Resource: !Ref ApiKeySecret
 
   GitHubActionsRole:
     Type: AWS::IAM::Role
