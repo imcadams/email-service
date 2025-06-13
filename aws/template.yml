@@ -191,6 +191,7 @@ Resources:
     Type: AWS::Lambda::Function
     DependsOn: ApiKey
     Properties:
+      Runtime: nodejs18.x
       Handler: index.handler
       Role: !GetAtt LambdaExecutionRole.Arn
       Code:
