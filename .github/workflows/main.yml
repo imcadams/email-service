@@ -38,7 +38,9 @@ jobs:
               Environment=${{ env.ENVIRONMENT }} \
               GithubOrg=${{ github.repository_owner }} \
               GithubRepo=${{ github.event.repository.name }} \
-            --capabilities CAPABILITY_IAM
+            --capabilities CAPABILITY_IAM \
+            --no-fail-on-empty-changeset \
+            --on-failure DELETE
       
       - name: Get CloudFormation outputs
         id: cfn-outputs
