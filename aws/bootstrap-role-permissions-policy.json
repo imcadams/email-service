@@ -56,7 +56,11 @@
             ],
             "Resource": [
                 "arn:aws:apigateway:*::/restapis",
-                "arn:aws:apigateway:*::/restapis/*"
+                "arn:aws:apigateway:*::/restapis/*",
+                "arn:aws:apigateway:*::/apikeys",
+                "arn:aws:apigateway:*::/apikeys/*",
+                "arn:aws:apigateway:*::/usageplans",
+                "arn:aws:apigateway:*::/usageplans/*"
             ]
         },
         {
