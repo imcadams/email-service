@@ -64,7 +64,13 @@ Resources:
               - Effect: Allow
                 Action:
                   - lambda:UpdateFunctionCode
+                  - lambda:GetFunction
+                  - lambda:UpdateFunctionConfiguration
                 Resource: !GetAtt EmailFunction.Arn
+              - Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                Resource: !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*
 
   EmailFunction:
     Type: AWS::Lambda::Function
@@ -104,10 +110,21 @@ Resources:
       ResourceId: !Ref EmailApiResource
       HttpMethod: POST
       AuthorizationType: NONE
+      ApiKeyRequired: true
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
         Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${EmailFunction.Arn}/invocations
+      MethodResponses:
+        - StatusCode: '200'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: true
+        - StatusCode: '400'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: true
+        - StatusCode: '500'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: true
 
   EmailApiDeployment:
     Type: AWS::ApiGateway::Deployment
@@ -130,6 +147,33 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${EmailApi}/*/${Environment}/email
 
+  ApiKey:
+    Type: AWS::ApiGateway::ApiKey
+    DependsOn: EmailApiDeployment
+    Properties:
+      Name: !Sub email-service-apikey-${Environment}
+      Description: API Key for Email Service
+      Enabled: true
+      StageKeys:
+        - RestApiId: !Ref EmailApi
+          StageName: !Ref Environment
+
+  UsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    Properties:
+      ApiStages:
+        - ApiId: !Ref EmailApi
+          Stage: !Ref Environment
+      Description: Usage plan for Email Service
+      UsagePlanName: !Sub email-service-usage-plan-${Environment}
+
+  UsagePlanKey:
+    Type: AWS::ApiGateway::UsagePlanKey
+    Properties:
+      KeyId: !Ref ApiKey
+      KeyType: API_KEY
+      UsagePlanId: !Ref UsagePlan
+
 Outputs:
   LambdaFunctionName:
     Description: Name of the Lambda function
@@ -143,3 +187,6 @@ Outputs:
   ApiEndpoint:
     Description: API Gateway endpoint URL
     Value: !Sub https://${EmailApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/email
+  ApiKey:
+    Description: API Key Value
+    Value: !Ref ApiKey

@@ -48,6 +48,20 @@
         {
             "Effect": "Allow",
             "Action": [
+                "apigateway:GET",
+                "apigateway:POST",
+                "apigateway:PUT",
+                "apigateway:DELETE",
+                "apigateway:PATCH"
+            ],
+            "Resource": [
+                "arn:aws:apigateway:*::/restapis",
+                "arn:aws:apigateway:*::/restapis/*"
+            ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
                 "iam:GetPolicy",
                 "iam:GetPolicyVersion"
             ],
