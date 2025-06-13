@@ -78,12 +78,18 @@
                 "secretsmanager:PutSecretValue",
                 "secretsmanager:UpdateSecret",
                 "secretsmanager:GetSecretValue",
-                "secretsmanager:DeleteSecret",
-                "secretsmanager:GetRandomPassword"
+                "secretsmanager:DeleteSecret"
             ],
             "Resource": [
                 "arn:aws:secretsmanager:*:*:secret:email-service-*"
             ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "secretsmanager:GetRandomPassword"
+            ],
+            "Resource": "*"
         }
     ]
 }
