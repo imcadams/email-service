@@ -9,11 +9,42 @@ const sesClient = new SESClient({ region: sesAwsRegion });
 // Read the fixed FROM address from environment variable
 const fixedFromAddress = process.env.FIXED_FROM_ADDRESS;
 
-// Define common CORS headers
-const corsHeaders = {
-  'Access-Control-Allow-Origin': 'https://www.mcadamsdevelopment.com,https://mcadamsdevelopment.com', // Or use '*' for testing, but be specific for production
+// Allowed origins from environment variables
+const defaultOriginEnv = process.env.CORS_ALLOWED_ORIGIN_SINGLE;
+const allowedOriginsEnv = process.env.ALLOWED_ORIGINS; // Comma-separated string
+
+const getAllowedOrigins = (): string[] => {
+  const origins: string[] = [];
+  if (defaultOriginEnv) {
+    origins.push(defaultOriginEnv.trim());
+  }
+  if (allowedOriginsEnv) {
+    origins.push(...allowedOriginsEnv.split(',').map(o => o.trim()).filter(o => o));
+  }
+  return origins;
+};
+
+const getResponseOrigin = (requestOrigin: string | undefined, allowedOriginsFromEnv: string[]): string | undefined => {
+  // If the request's origin is in the explicitly allowed list, use it.
+  if (requestOrigin && allowedOriginsFromEnv.includes(requestOrigin)) {
+    return requestOrigin;
+  }
+  // If there's a specific default origin configured (CORS_ALLOWED_ORIGIN_SINGLE),
+  // and the requestOrigin was either not provided or didn't match the broader list,
+  // use this default origin. This also covers the case where allowedOriginsFromEnv is empty.
+  if (defaultOriginEnv) {
+    return defaultOriginEnv.trim();
+  }
+  // If the requestOrigin is not in the allowed list and no specific default is set,
+  // do not return an origin. This enforces a stricter policy.
+  return undefined;
+};
+
+
+// Define common CORS headers - Access-Control-Allow-Origin will be set dynamically
+const baseCorsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
-  'Access-Control-Allow-Methods': 'POST,OPTIONS', // Reflects what API Gateway is configured for
+  'Access-Control-Allow-Methods': 'POST,OPTIONS',
 };
 
 const MAX_RECIPIENTS = 10;
@@ -77,6 +108,29 @@ function validateEmailRequest(request: EmailRequest): string | null {
 }
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  const requestOrigin = event.headers.origin || event.headers.Origin; // Handle case-insensitivity for 'origin'
+  const allowedOrigins = getAllowedOrigins();
+  const responseOrigin = getResponseOrigin(requestOrigin, allowedOrigins);
+
+  // Start with base headers that don't include Access-Control-Allow-Origin
+  const corsHeaders: { [key: string]: string | boolean } = {
+    ...baseCorsHeaders, // Spread base headers like Allow-Headers, Allow-Methods
+  };
+
+  // Dynamically set Access-Control-Allow-Origin only if a valid origin is determined
+  if (responseOrigin) {
+    corsHeaders['Access-Control-Allow-Origin'] = responseOrigin;
+  }
+
+  // Handle OPTIONS request for CORS preflight
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: corsHeaders,
+      body: '',
+    };
+  }
+
   try {
     if (!fixedFromAddress) {
       console.error("Configuration error: FIXED_FROM_ADDRESS environment variable is not set.");
