@@ -10,8 +10,8 @@ const sesClient = new SESClient({ region: sesAwsRegion });
 const fixedFromAddress = process.env.FIXED_FROM_ADDRESS;
 
 // Allowed origins from environment variables
-const defaultOriginEnv = process.env.CORS_ALLOWED_ORIGIN_SINGLE;
-const allowedOriginsEnv = process.env.ALLOWED_ORIGINS; // Comma-separated string
+const defaultOriginEnv = 'https://www.mcadamsdevelopment.com';
+const allowedOriginsEnv = 'https://www.mcadamsdevelopment.com,https://mcadamsdevelopment.com'; // Comma-separated string
 
 const getAllowedOrigins = (): string[] => {
   const origins: string[] = [];
