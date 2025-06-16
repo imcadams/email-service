@@ -89,3 +89,7 @@
     - [ ] **4. SES Configuration (Domain/Email Identity Verification):** Ensure domain and/or email identities are verified in SES for the FROM_ADDRESS.
     - [ ] **5. CloudWatch Alarms:** Set up CloudWatch Alarms for Lambda function errors, high invocation rates, and API Gateway 5XX errors.
     - [ ] **AWS WAF for API Gateway:** Integrate AWS WAF with API Gateway for enhanced security against common web exploits.
+
+- [ ] **9. Refine Lambda CORS `responseOrigin` Logic in `src/index.ts`**
+    - [ ] Ensure `responseOrigin` is always a string to satisfy TypeScript types for `APIGatewayProxyResult` headers.
+    - [ ] Implement fallback logic: `defaultOriginEnv` (from `CORS_ALLOWED_ORIGIN_SINGLE`) -> first origin in `allowedOriginsEnv` (from `ALLOWED_ORIGINS`) -> `'*'` as a final fallback.

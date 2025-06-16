@@ -9,6 +9,13 @@ const sesClient = new SESClient({ region: sesAwsRegion });
 // Read the fixed FROM address from environment variable
 const fixedFromAddress = process.env.FIXED_FROM_ADDRESS;
 
+// Define common CORS headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': 'https://www.mcadamsdevelopment.com,https://mcadamsdevelopment.com', // Or use '*' for testing, but be specific for production
+  'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+  'Access-Control-Allow-Methods': 'POST,OPTIONS', // Reflects what API Gateway is configured for
+};
+
 const MAX_RECIPIENTS = 10;
 const MAX_SUBJECT_LENGTH = 256;
 const MAX_BODY_LENGTH = 10000;
@@ -75,6 +82,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       console.error("Configuration error: FIXED_FROM_ADDRESS environment variable is not set.");
       return {
         statusCode: 500,
+        headers: corsHeaders, // Add CORS headers
         body: JSON.stringify({ message: "Internal server configuration error: Missing sender address." })
       };
     }
@@ -82,6 +90,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (!event.body) {
       return {
         statusCode: 400,
+        headers: corsHeaders, // Add CORS headers
         body: JSON.stringify({ message: "Request body is required" })
       };
     }
@@ -92,6 +101,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (validationError) {
       return {
         statusCode: 400,
+        headers: corsHeaders, // Add CORS headers
         body: JSON.stringify({ message: validationError })
       };
     }
@@ -119,7 +129,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     return {
       statusCode: 200,
       headers: {
-        'Content-Type': 'application/json'
+        ...corsHeaders, // Spread CORS headers
+        'Content-Type': 'application/json' // Keep existing content type or add others
       },
       body: JSON.stringify({ 
         message: "Email sent successfully",
@@ -133,6 +144,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (error instanceof SyntaxError) {
       return {
         statusCode: 400,
+        headers: corsHeaders, // Add CORS headers
         body: JSON.stringify({ 
           message: "Invalid JSON in request body"
         })
@@ -141,6 +153,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     return {
       statusCode: 500,
+      headers: corsHeaders, // Add CORS headers
       body: JSON.stringify({ 
         message: "Error sending email", 
         error: error instanceof Error ? error.message : 'Unknown error'
