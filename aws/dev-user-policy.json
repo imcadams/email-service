@@ -61,6 +61,7 @@
                 "iam:ListAttachedRolePolicies",
                 "iam:CreateRole",
                 "iam:DeleteRole",
+                "iam:DeleteRolePolicy",
                 "iam:PutRolePolicy",
                 "iam:UpdateRole",
                 "iam:AttachRolePolicy",
@@ -69,7 +70,8 @@
                 "iam:GetOpenIDConnectProvider",
                 "iam:CreateOpenIDConnectProvider",
                 "iam:DeleteOpenIDConnectProvider",
-                "iam:TagOpenIDConnectProvider"
+                "iam:TagOpenIDConnectProvider",
+                "iam:TagRole"
             ],
             "Resource": "*"
         },
@@ -84,6 +86,62 @@
             "Effect": "Allow",
             "Action": "secretsmanager:*",
             "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ssm:GetParameters"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "iam:DeleteRolePolicy"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ssm:GetParameter"
+            ],
+            "Resource": "arn:aws:ssm:*:*:parameter/cdk-bootstrap/*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ssm:PutParameter"
+            ],
+            "Resource": "arn:aws:ssm:*:*:parameter/cdk-bootstrap/hnb659fds/version"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ecr:CreateRepository",
+                "ecr:SetRepositoryPolicy",
+                "ecr:DeleteRepository",
+                "ecr:DescribeRepositories",
+                "ecr:PutLifecyclePolicy"
+            ],
+            "Resource": "arn:aws:ecr:*:*:repository/cdk-hnb659fds-container-assets-*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ecr:GetAuthorizationToken"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": "ssm:GetParameters",
+            "Resource": "arn:aws:ssm:us-east-1:957356740227:parameter/cdk-bootstrap/hnb659fds/version"
+        },
+        {
+            "Effect": "Allow",
+            "Action": "iam:DeleteRolePolicy",
+            "Resource": "arn:aws:iam::957356740227:role/cdk-hnb659fds-file-publishing-role-957356740227-us-east-1"
         }
     ]
 }
