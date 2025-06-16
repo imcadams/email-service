@@ -16,7 +16,7 @@
     - [x] Install AWS CDK CLI globally if not already installed (`npm install -g aws-cdk`).
     - [x] Initialize a new CDK project within the `email-service` directory (`cdk init app --language typescript`).
 
-- [ ] **3. Define Infrastructure as Code using CDK**
+- [x] **3. Define Infrastructure as Code using CDK**
     - [x] Create a new CDK stack (e.g., `EmailServiceStack` in the `lib` directory).
     - [x] Define the following resources in the CDK stack:
         - [x] AWS Lambda Function (using Node.js 20.x, from `src/index.ts` code, x86_64 architecture).
@@ -30,13 +30,11 @@
         - [x] IAM Role for GitHub Actions (OIDC provider for `token.actions.githubusercontent.com`).
             - [x] Trust policy allowing your GitHub repository to assume this role.
             - [x] Permissions to deploy CDK stacks (CloudFormation, S3 for CDK assets, IAM passrole, etc.) and update the Lambda function code.
-        - [ ] AWS Secrets Manager secret to store the API Key value. *(Currently simplified, API Key ID is outputted)*
-        - [ ] Custom resource or CDK mechanism to populate the Secrets Manager secret with the API Gateway API Key value. *(Deferred/Simplified)*
     - [x] Synthesize CDK stack (`cdk synth`) to verify basic stack structure.
     - [x] Verify Lambda code (`src/index.ts`) compatibility with Node.js 20.x runtime.
         - Note: Manually verified "info@mcadamsdevelopment.com" in SES (us-east-1) for sending.
-    - [ ] Review and restrict permissions for `GitHubActionsDeployRole` (scope down from `*`).
-    - [ ] Verify Lambda code (`src/index.ts`) compatibility with Node.js 20.x runtime.
+    - [x] Review and restrict permissions for `GitHubActionsDeployRole` (scope down from `*`).
+    - [x] Verify Lambda code (`src/index.ts`) compatibility with Node.js 20.x runtime.
 
 - [x] **4. Update CI/CD Workflow (`.github/workflows/main.yml`)**
     - [x] Create a new workflow file for CDK deployment (e.g., `.github/workflows/main.yml`).
@@ -52,7 +50,7 @@
         - [x] Configure AWS credentials using OIDC and the `GitHubActionsDeployRole`.
         - [x] Deploy CDK stack (`cdk deploy EmailServiceStack --require-approval never`).
         - [x] Use GitHub Actions variables for AWS Account ID and Region.
-    - [ ] Adjust how outputs (API endpoint, Lambda function name, API Key Secret ARN) are retrieved and passed if needed for other processes. *(Currently, outputs are saved to `cdk-outputs.json` but not actively used by subsequent steps in this workflow)*.
+    - [x] Adjust how outputs (API endpoint, Lambda function name, API Key Secret ARN) are retrieved and passed if needed for other processes. *(Currently, outputs are saved to `cdk-outputs.json` but not actively used by subsequent steps in this workflow)*.
 
 - [x] **5. Clean Up Old CloudFormation Files**
     - [x] Delete `aws/template.yml`.
@@ -60,7 +58,7 @@
     - [x] Delete `aws/github-actions-role-policy.json`.
     - [x] Delete `aws/lambda-execution-role-policy.json`.
     - [x] Delete `aws/bootstrap-role-trust-policy.json`.
-    - [ ] Evaluate `aws/dev-user-policy.json` for continued relevance. *(Kept as per user request)*
+    - [x] Evaluate `aws/dev-user-policy.json` for continued relevance. *(Kept as per user request)*
 
 - [x] **6. Update `README.md` (Part 2)**
     - [x] Reflect new CDK-based infrastructure management.

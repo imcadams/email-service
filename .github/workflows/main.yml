@@ -72,3 +72,9 @@ jobs:
       - name: Deploy CDK Stack to Production
         working-directory: ./cdk_infra
         run: npx cdk deploy EmailServiceStack --require-approval never --outputs-file cdk-outputs.json
+
+      - name: Upload CDK outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdk-outputs
+          path: ./cdk_infra/cdk-outputs.json
