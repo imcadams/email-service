@@ -70,8 +70,8 @@
     - [x] Explain how to get the API Key.
 
 - [ ] **7. Testing**
-    - [ ] Manually deploy the CDK stack from local environment (`cdk deploy`).
-    - [ ] Test email sending functionality via API Gateway.
+    - [x] Manually deploy the CDK stack from local environment (`cdk deploy`).
+    - [x] Test email sending functionality via API Gateway.
     - [ ] Trigger GitHub Actions workflow and verify successful deployment.
     - [ ] Verify API Key retrieval for frontend use.
 
@@ -86,3 +86,6 @@
     - [ ] **Security Scanning:** Incorporate tools like `npm audit` or other vulnerability scanners into the CI/CD workflow.
     - [ ] **Artifact Management:** For more complex workflows, consider passing build artifacts (like the `dist` folder or `node_modules`) between jobs instead of rebuilding/reinstalling in each job.
     - [ ] **AWS Secrets Manager for API Key:** Implement storing and retrieving the API Gateway API Key value using AWS Secrets Manager for better security and management, instead of just outputting the Key ID.
+    - [ ] **4. SES Configuration (Domain/Email Identity Verification):** Ensure domain and/or email identities are verified in SES for the FROM_ADDRESS.
+    - [ ] **5. CloudWatch Alarms:** Set up CloudWatch Alarms for Lambda function errors, high invocation rates, and API Gateway 5XX errors.
+    - [ ] **AWS WAF for API Gateway:** Integrate AWS WAF with API Gateway for enhanced security against common web exploits.

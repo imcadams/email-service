@@ -133,3 +133,12 @@ The AWS CDK application will define and manage the necessary IAM roles and polic
 *   **GitHub Actions Deployment Role**: Permissions to deploy CDK stacks (CloudFormation, S3 assets, IAM roles, API Gateway, Lambda, Secrets Manager, etc.).
 
 Further details on specific permissions will be available within the CDK stack definition.
+
+## Features
+
+The Lambda function includes the following features and validations:
+
+*   **Fixed "FROM" Address**: The email "FROM" address can be configured via the `FIXED_FROM_ADDRESS` environment variable set in the Lambda function's configuration. This ensures all emails are sent from a consistent, verified address.
+*   **Recipient Limit**: A maximum of 10 recipients (`MAX_RECIPIENTS = 10`) are allowed per email request.
+*   **Subject Length Limit**: The email subject has a maximum length of 256 characters (`MAX_SUBJECT_LENGTH = 256`).
+*   **Body Length Limit**: The email body has a maximum length of 10,000 characters (`MAX_BODY_LENGTH = 10000`).

@@ -142,6 +142,11 @@
             "Effect": "Allow",
             "Action": "iam:DeleteRolePolicy",
             "Resource": "arn:aws:iam::957356740227:role/cdk-hnb659fds-file-publishing-role-957356740227-us-east-1"
+        },
+        {
+            "Effect": "Allow",
+            "Action": "iam:PassRole",
+            "Resource": "arn:aws:iam::957356740227:role/cdk-hnb659fds-cfn-exec-role-957356740227-us-east-1"
         }
     ]
 }

@@ -9,6 +9,10 @@ const sesClient = new SESClient({ region: sesAwsRegion });
 // Read the fixed FROM address from environment variable
 const fixedFromAddress = process.env.FIXED_FROM_ADDRESS;
 
+const MAX_RECIPIENTS = 10;
+const MAX_SUBJECT_LENGTH = 256;
+const MAX_BODY_LENGTH = 10000;
+
 interface EmailRequest {
   to: string[];
   subject: string;
@@ -26,6 +30,10 @@ function validateEmailRequest(request: EmailRequest): string | null {
     return "Recipients list is required and must not be empty";
   }
 
+  if (request.to.length > MAX_RECIPIENTS) {
+    return `Number of recipients exceeds the maximum limit of ${MAX_RECIPIENTS}`;
+  }
+
   // Removed from address validation as it's now fixed
   // if (!request.from || typeof request.from !== 'string') {
   //   return "From address is required and must be a string";
@@ -35,8 +43,16 @@ function validateEmailRequest(request: EmailRequest): string | null {
     return "Subject is required and must be a string";
   }
 
+  if (request.subject.length > MAX_SUBJECT_LENGTH) {
+    return `Subject length exceeds the maximum limit of ${MAX_SUBJECT_LENGTH} characters`;
+  }
+
   if (!request.body || typeof request.body !== 'string') {
     return "Body is required and must be a string";
+  }
+
+  if (request.body.length > MAX_BODY_LENGTH) {
+    return `Body length exceeds the maximum limit of ${MAX_BODY_LENGTH} characters`;
   }
 
   // Removed from address validation as it's now fixed
