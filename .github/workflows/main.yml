@@ -1,104 +1,74 @@
-name: CI/CD
+name: CI/CD for Email Service
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ main ]
   pull_request:
-    branches: [ "master" ]
-
-permissions:
-  contents: read
-  id-token: write
-
-env:
-  AWS_REGION: ${{ secrets.AWS_REGION }}
-  ENVIRONMENT: prod
+    branches: [ main ]
 
 jobs:
-  deploy-infrastructure:
+  build_and_test:
     runs-on: ubuntu-latest
-    outputs:
-      function-name: ${{ steps.cfn-outputs.outputs.function-name }}
-      role-arn: ${{ steps.cfn-outputs.outputs.role-arn }}
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          role-to-assume: ${{ secrets.AWS_BOOTSTRAP_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-      
-      - name: Deploy CloudFormation stack
-        run: |
-          aws cloudformation deploy \
-            --template-file aws/template.yml \
-            --stack-name email-service-${{ env.ENVIRONMENT }} \
-            --parameter-overrides \
-              Environment=${{ env.ENVIRONMENT }} \
-              GithubOrg=${{ github.repository_owner }} \
-              GithubRepo=${{ github.event.repository.name }} \
-            --capabilities CAPABILITY_IAM
-      
-      - name: Get CloudFormation outputs
-        id: cfn-outputs
-        run: |
-          STACK_NAME="email-service-${{ env.ENVIRONMENT }}"
-          echo "function-name=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`LambdaFunctionName`].OutputValue' --output text)" >> $GITHUB_OUTPUT
-          echo "role-arn=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`GitHubActionsRoleArn`].OutputValue' --output text)" >> $GITHUB_OUTPUT
+          node-version: '20.x'
 
-  build-and-deploy:
-    needs: deploy-infrastructure
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Build Lambda function
+        run: npm run build
+
+      - name: Install CDK dependencies
+        working-directory: ./cdk_infra
+        run: npm install
+
+      - name: Run CDK tests
+        working-directory: ./cdk_infra
+        run: npm test
+
+      - name: Synthesize CDK stack
+        working-directory: ./cdk_infra
+        run: npx cdk synth
+
+  deploy_prod:
     runs-on: ubuntu-latest
+    needs: build_and_test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
-      contents: read
-      packages: write
-      id-token: write
-
-    strategy:
-      matrix:
-        node-version: [18.x]
+      id-token: write # Required for OIDC
+      contents: read # Required to checkout the code
 
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v3
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm'
-    
-    - name: Install dependencies
-      run: npm ci
-    
-    - name: Type check
-      run: npm run type-check || npx tsc --noEmit
-    
-    - name: Build
-      run: npm run build
-    
-    - name: Create deployment package
-      run: |
-        cd dist
-        zip -r ../function.zip .
-        cd ..
-        zip -ur function.zip node_modules
-    
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: function-artifact
-        path: function.zip
-        
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v2
-      with:
-        role-to-assume: ${{ needs.deploy-infrastructure.outputs.role-arn }}
-        aws-region: ${{ env.AWS_REGION }}
-    
-    - name: Deploy to Lambda
-      if: github.ref == 'refs/heads/master'
-      run: |
-        aws lambda update-function-code \
-          --function-name ${{ needs.deploy-infrastructure.outputs.function-name }} \
-          --zip-file fileb://function.zip
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Build Lambda function
+        run: npm run build
+
+      - name: Install CDK dependencies
+        working-directory: ./cdk_infra
+        run: npm install
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/EmailService-GitHubActionsDeployRole-EmailServiceStack # Replaced hardcoded Account ID
+          aws-region: ${{ vars.AWS_REGION }} # Replaced hardcoded Region
+
+      - name: Deploy CDK Stack to Production
+        working-directory: ./cdk_infra
+        run: npx cdk deploy EmailServiceStack --require-approval never --outputs-file cdk-outputs.json

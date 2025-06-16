@@ -6,6 +6,11 @@ dist/
 build/
 *.js
 *.js.map
+!cdk_infra/**/*.js
+!cdk_infra/**/*.js.map
+
+# CDK output
+cdk.out/
 
 # TypeScript
 *.tsbuildinfo

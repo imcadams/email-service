@@ -1,13 +1,19 @@
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 
-const sesClient = new SESClient({ region: "us-east-1" }); // Change this to your AWS region
+// Use the AWS_REGION environment variable provided by the Lambda runtime by default,
+// or a specific one if set (e.g., SES_AWS_REGION for SES if it needs to be different).
+const sesAwsRegion = process.env.SES_AWS_REGION || process.env.AWS_REGION || "us-east-1";
+const sesClient = new SESClient({ region: sesAwsRegion });
+
+// Read the fixed FROM address from environment variable
+const fixedFromAddress = process.env.FIXED_FROM_ADDRESS;
 
 interface EmailRequest {
   to: string[];
   subject: string;
   body: string;
-  from: string;
+  // from: string; // Removed as we will use a fixed from address
 }
 
 function isValidEmail(email: string): boolean {
@@ -20,9 +26,10 @@ function validateEmailRequest(request: EmailRequest): string | null {
     return "Recipients list is required and must not be empty";
   }
 
-  if (!request.from || typeof request.from !== 'string') {
-    return "From address is required and must be a string";
-  }
+  // Removed from address validation as it's now fixed
+  // if (!request.from || typeof request.from !== 'string') {
+  //   return "From address is required and must be a string";
+  // }
 
   if (!request.subject || typeof request.subject !== 'string') {
     return "Subject is required and must be a string";
@@ -32,9 +39,10 @@ function validateEmailRequest(request: EmailRequest): string | null {
     return "Body is required and must be a string";
   }
 
-  if (!isValidEmail(request.from)) {
-    return "Invalid sender email address";
-  }
+  // Removed from address validation as it's now fixed
+  // if (!isValidEmail(request.from)) {
+  //   return "Invalid sender email address";
+  // }
 
   for (const recipient of request.to) {
     if (!isValidEmail(recipient)) {
@@ -47,6 +55,14 @@ function validateEmailRequest(request: EmailRequest): string | null {
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
+    if (!fixedFromAddress) {
+      console.error("Configuration error: FIXED_FROM_ADDRESS environment variable is not set.");
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ message: "Internal server configuration error: Missing sender address." })
+      };
+    }
+
     if (!event.body) {
       return {
         statusCode: 400,
@@ -78,7 +94,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           Data: emailRequest.subject,
         },
       },
-      Source: emailRequest.from,
+      Source: fixedFromAddress, // Use the fixed from address from env var
     };
 
     const command = new SendEmailCommand(params);
