@@ -32,26 +32,7 @@ export class EmailServiceStack extends cdk.Stack {
       ], 
     }));
 
-    // 3. API Gateway
-    const api = new apigateway.RestApi(this, 'EmailServiceApi', {
-      restApiName: 'Email Service API',
-      description: 'API Gateway for Email Service',
-      deployOptions: {
-        stageName: 'prod', // Default stage
-      },
-      defaultCorsPreflightOptions: {
-        allowOrigins: ['https://www.mcadamsdevelopment.com', 'https://mcadamsdevelopment.com'], // Replace with your actual frontend domain
-        allowMethods: ['POST'],
-        allowHeaders: apigateway.Cors.DEFAULT_HEADERS,
-      }
-    });
-
-    // Lambda Function (assuming it's defined elsewhere or you'll add it)
-    // For demonstration, let's assume a lambdaFunction construct is available
-    // const lambdaFunction = new lambda.Function(this, 'MyLambda', { ... });
-    // api.root.addMethod('POST', new apigateway.LambdaIntegration(lambdaFunction));
-
-    // 2. AWS Lambda Function 
+    // 2. AWS Lambda Function
     const emailLambda = new lambda.Function(this, 'EmailLambdaFunction', {
       runtime: lambda.Runtime.NODEJS_20_X,
       code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'dist')), // Corrected path to point to root dist folder
@@ -65,7 +46,21 @@ export class EmailServiceStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(30), // Optional: default is 3 seconds
       memorySize: 128, // Optional: default is 128 MB
     });
-    
+
+    // 3. API Gateway
+    const api = new apigateway.RestApi(this, 'EmailServiceApi', {
+      restApiName: 'Email Service API',
+      description: 'API Gateway for Email Service',
+      deployOptions: {
+        stageName: 'prod', // Default stage
+      },
+      defaultCorsPreflightOptions: {
+        allowOrigins: ['https://www.mcadamsdevelopment.com', 'https://mcadamsdevelopment.com'],
+        allowMethods: ['POST'],
+        allowHeaders: ['Content-Type', 'X-Amz-Date', 'Authorization', 'X-Api-Key', 'X-Amz-Security-Token'],
+      },
+    });
+
     const emailResource = api.root.addResource('email');
     const emailIntegration = new apigateway.LambdaIntegration(emailLambda);
     emailResource.addMethod('POST', emailIntegration, {
@@ -88,23 +83,17 @@ export class EmailServiceStack extends cdk.Stack {
           stage: api.deploymentStage,
         },
       ],
-      throttle: { // Add throttle settings
+      throttle: {
         rateLimit: 10, // requests per second
         burstLimit: 2 // burst requests
       },
-      quota: { // Add quota settings
+      quota: {
         limit: 1000, // requests per month
         period: apigateway.Period.MONTH
       }
     });
 
     usagePlan.addApiKey(apiKey);
-
-    // Output the API Key ID
-    new cdk.CfnOutput(this, 'ApiKeyId', {
-      value: apiKey.keyId,
-      description: 'The ID of the API Key for the Email Service. Store this securely.'
-    });
 
     // 5. IAM Role for GitHub Actions to deploy this stack
     const githubActionsRole = new iam.Role(this, 'GitHubActionsDeployRole', {
