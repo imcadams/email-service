@@ -2,9 +2,9 @@ name: CI/CD for Email Service
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, master ]
 
 jobs:
   build_and_test:
