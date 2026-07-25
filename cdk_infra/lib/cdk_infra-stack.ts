@@ -84,42 +84,7 @@ export class EmailServiceStack extends cdk.Stack {
       apiKeyRequired: false,
     });
 
-    // Retained for the additive rollout only. This path and its key are removed
-    // after the production /contact smoke test succeeds.
-    const emailResource = api.root.addResource('email');
-    emailResource.addMethod('POST', emailIntegration, {
-      apiKeyRequired: true,
-    });
-
-    // 4. API Key and Usage Plan
-    const apiKey = new apigateway.ApiKey(this, 'EmailServiceApiKey', {
-      apiKeyName: 'email-service-key',
-      description: 'API Key for Email Service',
-      enabled: true,
-    });
-
-    const usagePlan = new apigateway.UsagePlan(this, 'EmailServiceUsagePlan', {
-      name: 'EmailServiceUsagePlan',
-      description: 'Usage plan for Email Service',
-      apiStages: [
-        {
-          api: api,
-          stage: api.deploymentStage,
-        },
-      ],
-      throttle: {
-        rateLimit: 10, // requests per second
-        burstLimit: 2 // burst requests
-      },
-      quota: {
-        limit: 1000, // requests per month
-        period: apigateway.Period.MONTH
-      }
-    });
-
-    usagePlan.addApiKey(apiKey);
-
-    // 5. IAM Role for GitHub Actions to deploy this stack
+    // 4. IAM Role for GitHub Actions to deploy this stack
     const githubActionsRole = new iam.Role(this, 'GitHubActionsDeployRole', {
       assumedBy: new iam.FederatedPrincipal(
         `arn:aws:iam::${this.account}:oidc-provider/token.actions.githubusercontent.com`,
@@ -205,12 +170,17 @@ export class EmailServiceStack extends cdk.Stack {
                 `arn:aws:apigateway:${this.region}::/restapis`,
                 `arn:aws:apigateway:${this.region}::/restapis/${api.restApiId}`,
                 `arn:aws:apigateway:${this.region}::/restapis/${api.restApiId}/*`,
-                `arn:aws:apigateway:${this.region}::/apikeys`,
-                `arn:aws:apigateway:${this.region}::/apikeys/${apiKey.keyId}`,
-                // `arn:aws:apigateway:${this.region}::/apikeys/${apiKey.keyId}/*`, // Usually not needed for API key itself
-                `arn:aws:apigateway:${this.region}::/usageplans`,
-                `arn:aws:apigateway:${this.region}::/usageplans/${usagePlan.usagePlanId}`,
-                `arn:aws:apigateway:${this.region}::/usageplans/${usagePlan.usagePlanId}/*` // For linking keys to usage plan
+              ],
+            }),
+            // This is intentionally delete-only: it permits this update to
+            // remove the two previously deployed legacy resources, but cannot
+            // create, read, or re-enable an API key or usage plan.
+            new iam.PolicyStatement({
+              actions: ["apigateway:DELETE"],
+              resources: [
+                `arn:aws:apigateway:${this.region}::/apikeys/l95oirtw4g`,
+                `arn:aws:apigateway:${this.region}::/usageplans/hq6i24`,
+                `arn:aws:apigateway:${this.region}::/usageplans/hq6i24/*`,
               ],
             }),
             new iam.PolicyStatement({
@@ -229,19 +199,9 @@ export class EmailServiceStack extends cdk.Stack {
     });
 
     // Outputs
-    new cdk.CfnOutput(this, 'ApiEndpoint', {
-      value: api.urlForPath(emailResource.path),
-      description: 'API Gateway endpoint URL for Email service',
-    });
-
     new cdk.CfnOutput(this, 'ContactApiEndpoint', {
       value: api.urlForPath(contactResource.path),
       description: 'Public contact endpoint protected by server-side Turnstile verification',
-    });
-
-    new cdk.CfnOutput(this, 'ApiKeyId', {
-      value: apiKey.keyId,
-      description: 'API Key ID for Email service (use this to retrieve the key value from AWS console or Secrets Manager if configured)',
     });
 
     new cdk.CfnOutput(this, 'GitHubActionsRoleArn', {

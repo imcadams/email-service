@@ -28,6 +28,9 @@ describe('EmailServiceStack', () => {
       ApiKeyRequired: false,
       AuthorizationType: 'NONE',
     });
+    synthesized.resourceCountIs('AWS::ApiGateway::ApiKey', 0);
+    synthesized.resourceCountIs('AWS::ApiGateway::UsagePlan', 0);
+    expect(JSON.stringify(synthesized.toJSON())).not.toContain('PathPart":"email');
   });
 
   test('configures contact-specific stage throttling', () => {
