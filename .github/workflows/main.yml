@@ -16,17 +16,21 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '22.x'
+          cache: npm
 
       - name: Install root dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build Lambda function
         run: npm run build
 
+      - name: Run Lambda tests
+        run: npm test
+
       - name: Install CDK dependencies
         working-directory: ./cdk_infra
-        run: npm install
+        run: npm ci
 
       - name: Run CDK tests
         working-directory: ./cdk_infra
@@ -39,10 +43,13 @@ jobs:
   deploy_prod:
     runs-on: ubuntu-latest
     needs: build_and_test
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    env:
+      AWS_REGION: us-east-1
+      AWS_DEPLOY_ROLE_ARN: arn:aws:iam::957356740227:role/EmailService-GitHubActionsDeployRole-EmailServiceStack
     permissions:
-      id-token: write # Required for OIDC
-      contents: read # Required to checkout the code
+      id-token: write
+      contents: read
 
     steps:
       - name: Checkout code
@@ -51,23 +58,24 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '22.x'
+          cache: npm
 
       - name: Install root dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build Lambda function
         run: npm run build
 
       - name: Install CDK dependencies
         working-directory: ./cdk_infra
-        run: npm install
+        run: npm ci
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
-          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/EmailService-GitHubActionsDeployRole-EmailServiceStack # Replaced hardcoded Account ID
-          aws-region: ${{ vars.AWS_REGION }} # Replaced hardcoded Region
+          role-to-assume: ${{ env.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Deploy CDK Stack to Production
         working-directory: ./cdk_infra
