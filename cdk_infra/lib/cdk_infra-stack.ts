@@ -3,6 +3,7 @@ import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
+import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as path from 'path';
 
 export interface EmailServiceStackProps extends cdk.StackProps {
@@ -25,26 +26,35 @@ export class EmailServiceStack extends cdk.Stack {
 
     // Add SES send permissions to the Lambda role
     lambdaExecutionRole.addToPolicy(new iam.PolicyStatement({
-      actions: ['ses:SendEmail', 'ses:SendRawEmail'],
+      actions: ['ses:SendEmail'],
       resources: [
-        // Restrict to the specific verified identity
         `arn:aws:ses:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:identity/info@mcadamsdevelopment.com`
-      ], 
+      ],
     }));
+
+    const turnstileSecret = secretsmanager.Secret.fromSecretNameV2(
+      this,
+      'TurnstileSecret',
+      'mcadams-development/turnstile-secret-key',
+    );
+    turnstileSecret.grantRead(lambdaExecutionRole);
 
     // 2. AWS Lambda Function
     const emailLambda = new lambda.Function(this, 'EmailLambdaFunction', {
-      runtime: lambda.Runtime.NODEJS_20_X,
-      code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'dist')), // Corrected path to point to root dist folder
+      runtime: lambda.Runtime.NODEJS_22_X,
+      code: lambda.Code.fromAsset(path.join(__dirname, '..', '..', 'dist')),
       handler: 'index.handler',
       role: lambdaExecutionRole,
       architecture: lambda.Architecture.X86_64,
       environment: {
-        SES_AWS_REGION: cdk.Stack.of(this).region, // Set SES region from stack region
+        SES_AWS_REGION: cdk.Stack.of(this).region,
         FIXED_FROM_ADDRESS: 'info@mcadamsdevelopment.com',
+        FIXED_TO_ADDRESS: 'info@mcadamsdevelopment.com',
+        TURNSTILE_SECRET_ID: turnstileSecret.secretName,
+        TURNSTILE_ALLOWED_HOSTNAME: 'www.mcadamsdevelopment.com',
       },
-      timeout: cdk.Duration.seconds(30), // Optional: default is 3 seconds
-      memorySize: 128, // Optional: default is 128 MB
+      timeout: cdk.Duration.seconds(10),
+      memorySize: 128,
     });
 
     // 3. API Gateway
@@ -52,17 +62,31 @@ export class EmailServiceStack extends cdk.Stack {
       restApiName: 'Email Service API',
       description: 'API Gateway for Email Service',
       deployOptions: {
-        stageName: 'prod', // Default stage
+        stageName: 'prod',
+        methodOptions: {
+          '/contact/POST': {
+            throttlingRateLimit: 2,
+            throttlingBurstLimit: 5,
+          },
+        },
       },
       defaultCorsPreflightOptions: {
         allowOrigins: ['https://www.mcadamsdevelopment.com', 'https://mcadamsdevelopment.com'],
         allowMethods: ['POST'],
-        allowHeaders: ['Content-Type', 'X-Amz-Date', 'Authorization', 'X-Api-Key', 'X-Amz-Security-Token'],
+        allowHeaders: ['Content-Type'],
       },
     });
 
-    const emailResource = api.root.addResource('email');
     const emailIntegration = new apigateway.LambdaIntegration(emailLambda);
+
+    const contactResource = api.root.addResource('contact');
+    contactResource.addMethod('POST', emailIntegration, {
+      apiKeyRequired: false,
+    });
+
+    // Retained for the additive rollout only. This path and its key are removed
+    // after the production /contact smoke test succeeds.
+    const emailResource = api.root.addResource('email');
     emailResource.addMethod('POST', emailIntegration, {
       apiKeyRequired: true,
     });
@@ -101,7 +125,7 @@ export class EmailServiceStack extends cdk.Stack {
         `arn:aws:iam::${this.account}:oidc-provider/token.actions.githubusercontent.com`,
         {
           StringLike: {
-            'token.actions.githubusercontent.com:sub': `repo:${props.githubOrg}/${props.githubRepo}:*`,
+            'token.actions.githubusercontent.com:sub': `repo:${props.githubOrg}/${props.githubRepo}:ref:refs/heads/master`,
           },
           StringEquals: {
             'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com',
@@ -142,11 +166,11 @@ export class EmailServiceStack extends cdk.Stack {
               actions: [
                 "iam:GetRole", "iam:CreateRole", "iam:DeleteRole",
                 "iam:AttachRolePolicy", "iam:PutRolePolicy", "iam:DetachRolePolicy", "iam:DeleteRolePolicy",
-                "iam:TagRole"
+                "iam:TagRole", "iam:UpdateAssumeRolePolicy"
               ],
               resources: [
-                // Role name pattern for the Lambda execution role created by this stack
-                `arn:aws:iam::${this.account}:role/${this.stackName}-${lambdaExecutionRole.node.id}-*`
+                `arn:aws:iam::${this.account}:role/${this.stackName}-${lambdaExecutionRole.node.id}-*`,
+                `arn:aws:iam::${this.account}:role/EmailService-GitHubActionsDeployRole-${this.stackName}`
               ],
             }),
             new iam.PolicyStatement({
@@ -208,6 +232,11 @@ export class EmailServiceStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'ApiEndpoint', {
       value: api.urlForPath(emailResource.path),
       description: 'API Gateway endpoint URL for Email service',
+    });
+
+    new cdk.CfnOutput(this, 'ContactApiEndpoint', {
+      value: api.urlForPath(contactResource.path),
+      description: 'Public contact endpoint protected by server-side Turnstile verification',
     });
 
     new cdk.CfnOutput(this, 'ApiKeyId', {

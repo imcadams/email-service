@@ -1,217 +1,352 @@
-import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
+import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
+import { SendEmailCommand, SESClient } from "@aws-sdk/client-ses";
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 
-// Use the AWS_REGION environment variable provided by the Lambda runtime by default,
-// or a specific one if set (e.g., SES_AWS_REGION for SES if it needs to be different).
-const sesAwsRegion = process.env.SES_AWS_REGION || process.env.AWS_REGION || "us-east-1";
-const sesClient = new SESClient({ region: sesAwsRegion });
+const SES_REGION = process.env.SES_AWS_REGION || process.env.AWS_REGION || "us-east-1";
+const FIXED_FROM_ADDRESS = process.env.FIXED_FROM_ADDRESS || "info@mcadamsdevelopment.com";
+const FIXED_TO_ADDRESS = process.env.FIXED_TO_ADDRESS || "info@mcadamsdevelopment.com";
+const TURNSTILE_SECRET_ID =
+  process.env.TURNSTILE_SECRET_ID || "mcadams-development/turnstile-secret-key";
+const TURNSTILE_ALLOWED_HOSTNAME =
+  process.env.TURNSTILE_ALLOWED_HOSTNAME || "www.mcadamsdevelopment.com";
+const TURNSTILE_ACTION = "contact";
+const TURNSTILE_TIMEOUT_MS = 3_000;
+const SECRET_CACHE_MS = 5 * 60 * 1_000;
+const MIN_FORM_AGE_MS = 3_000;
+const MAX_FORM_AGE_MS = 2 * 60 * 60 * 1_000;
+const MAX_REQUEST_BYTES = 32 * 1024;
 
-// Read the fixed FROM address from environment variable
-const fixedFromAddress = process.env.FIXED_FROM_ADDRESS;
+const allowedOrigins = new Set([
+  "https://www.mcadamsdevelopment.com",
+  "https://mcadamsdevelopment.com",
+]);
 
-// Allowed origins from environment variables
-const defaultOriginEnv = 'https://www.mcadamsdevelopment.com';
-const allowedOriginsEnv = 'https://www.mcadamsdevelopment.com,https://mcadamsdevelopment.com'; // Comma-separated string
+const serviceInterests = new Set([
+  "website",
+  "webapp",
+  "mobile",
+  "cloud",
+  "devops",
+  "design",
+  "ai-receptionist",
+]);
 
-const getAllowedOrigins = (): string[] => {
-  const origins: string[] = [];
-  if (defaultOriginEnv) {
-    origins.push(defaultOriginEnv.trim());
-  }
-  if (allowedOriginsEnv) {
-    origins.push(...allowedOriginsEnv.split(',').map(o => o.trim()).filter(o => o));
-  }
-  return origins;
-};
+const budgets = new Set([
+  "under5k",
+  "5k-15k",
+  "15k-25k",
+  "25k-50k",
+  "50kplus",
+]);
 
-const getResponseOrigin = (requestOrigin: string | undefined, allowedOriginsFromEnv: string[]): string | undefined => {
-  // If the request's origin is in the explicitly allowed list, use it.
-  if (requestOrigin && allowedOriginsFromEnv.includes(requestOrigin)) {
-    return requestOrigin;
-  }
-  // If there's a specific default origin configured (CORS_ALLOWED_ORIGIN_SINGLE),
-  // and the requestOrigin was either not provided or didn't match the broader list,
-  // use this default origin. This also covers the case where allowedOriginsFromEnv is empty.
-  if (defaultOriginEnv) {
-    return defaultOriginEnv.trim();
-  }
-  // If the requestOrigin is not in the allowed list and no specific default is set,
-  // do not return an origin. This enforces a stricter policy.
-  return undefined;
-};
+const supportedSolutions = new Set(["hvac-ai-receptionist"]);
 
-
-// Define common CORS headers - Access-Control-Allow-Origin will be set dynamically
-const baseCorsHeaders = {
-  'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
-  'Access-Control-Allow-Methods': 'POST,OPTIONS',
-};
-
-const MAX_RECIPIENTS = 10;
-const MAX_SUBJECT_LENGTH = 256;
-const MAX_BODY_LENGTH = 10000;
-
-interface EmailRequest {
-  to: string[];
-  subject: string;
-  body: string;
-  // from: string; // Removed as we will use a fixed from address
+export interface ContactRequest {
+  name: string;
+  email: string;
+  phone: string;
+  serviceInterest: string;
+  budget: string;
+  description: string;
+  sourceSolution?: string;
+  turnstileToken: string;
+  website?: string;
+  formStartedAt: number;
 }
 
-function isValidEmail(email: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
+interface TurnstileResult {
+  success: boolean;
+  hostname?: string;
+  action?: string;
+  "error-codes"?: string[];
 }
 
-function validateEmailRequest(request: EmailRequest): string | null {
-  if (!request.to || !Array.isArray(request.to) || request.to.length === 0) {
-    return "Recipients list is required and must not be empty";
-  }
-
-  if (request.to.length > MAX_RECIPIENTS) {
-    return `Number of recipients exceeds the maximum limit of ${MAX_RECIPIENTS}`;
-  }
-
-  // Removed from address validation as it's now fixed
-  // if (!request.from || typeof request.from !== 'string') {
-  //   return "From address is required and must be a string";
-  // }
-
-  if (!request.subject || typeof request.subject !== 'string') {
-    return "Subject is required and must be a string";
-  }
-
-  if (request.subject.length > MAX_SUBJECT_LENGTH) {
-    return `Subject length exceeds the maximum limit of ${MAX_SUBJECT_LENGTH} characters`;
-  }
-
-  if (!request.body || typeof request.body !== 'string') {
-    return "Body is required and must be a string";
-  }
-
-  if (request.body.length > MAX_BODY_LENGTH) {
-    return `Body length exceeds the maximum limit of ${MAX_BODY_LENGTH} characters`;
-  }
-
-  // Removed from address validation as it's now fixed
-  // if (!isValidEmail(request.from)) {
-  //   return "Invalid sender email address";
-  // }
-
-  for (const recipient of request.to) {
-    if (!isValidEmail(recipient)) {
-      return `Invalid recipient email address: ${recipient}`;
-    }
-  }
-
-  return null;
+interface VerificationInput {
+  secret: string;
+  token: string;
+  remoteIp?: string;
 }
 
-export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  const requestOrigin = event.headers.origin || event.headers.Origin; // Handle case-insensitivity for 'origin'
-  const allowedOrigins = getAllowedOrigins();
-  const responseOrigin = getResponseOrigin(requestOrigin, allowedOrigins);
+export interface ContactDependencies {
+  now: () => number;
+  getTurnstileSecret: () => Promise<string>;
+  verifyTurnstile: (input: VerificationInput) => Promise<TurnstileResult>;
+  sendEmail: (request: ContactRequest) => Promise<void>;
+  log: (requestId: string, outcome: string) => void;
+}
 
-  // Start with base headers that don't include Access-Control-Allow-Origin
-  const corsHeaders: { [key: string]: string | boolean } = {
-    ...baseCorsHeaders, // Spread base headers like Allow-Headers, Allow-Methods
+const sesClient = new SESClient({ region: SES_REGION });
+const secretsClient = new SecretsManagerClient({ region: process.env.AWS_REGION || "us-east-1" });
+
+let secretCache: { value: string; expiresAt: number } | undefined;
+
+function stringField(
+  value: unknown,
+  field: string,
+  minLength: number,
+  maxLength: number,
+): string {
+  if (typeof value !== "string") {
+    throw new Error(`${field} must be a string`);
+  }
+
+  const normalized = value.trim();
+  if (normalized.length < minLength || normalized.length > maxLength) {
+    throw new Error(`${field} is outside the allowed length`);
+  }
+
+  return normalized;
+}
+
+function parseContactRequest(value: unknown): ContactRequest {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("request body must be an object");
+  }
+
+  const input = value as Record<string, unknown>;
+  const email = stringField(input.email, "email", 3, 254).toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error("email is invalid");
+  }
+
+  const phone = stringField(input.phone, "phone", 10, 30);
+  const serviceInterest = stringField(input.serviceInterest, "serviceInterest", 1, 40);
+  const budget = stringField(input.budget, "budget", 1, 40);
+
+  if (!serviceInterests.has(serviceInterest)) {
+    throw new Error("serviceInterest is invalid");
+  }
+  if (!budgets.has(budget)) {
+    throw new Error("budget is invalid");
+  }
+
+  const sourceSolution =
+    input.sourceSolution === undefined
+      ? undefined
+      : stringField(input.sourceSolution, "sourceSolution", 1, 80);
+  if (sourceSolution && !supportedSolutions.has(sourceSolution)) {
+    throw new Error("sourceSolution is invalid");
+  }
+
+  if (typeof input.formStartedAt !== "number" || !Number.isFinite(input.formStartedAt)) {
+    throw new Error("formStartedAt is invalid");
+  }
+
+  return {
+    name: stringField(input.name, "name", 2, 100),
+    email,
+    phone,
+    serviceInterest,
+    budget,
+    description: stringField(input.description, "description", 10, 10_000),
+    sourceSolution,
+    turnstileToken: stringField(input.turnstileToken, "turnstileToken", 1, 4_096),
+    website:
+      input.website === undefined || input.website === ""
+        ? ""
+        : stringField(input.website, "website", 1, 200),
+    formStartedAt: input.formStartedAt,
+  };
+}
+
+function corsHeaders(origin: string | undefined): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "POST,OPTIONS",
+    "Content-Type": "application/json",
+    Vary: "Origin",
   };
 
-  // Dynamically set Access-Control-Allow-Origin only if a valid origin is determined
-  if (responseOrigin) {
-    corsHeaders['Access-Control-Allow-Origin'] = responseOrigin;
+  if (origin && allowedOrigins.has(origin)) {
+    headers["Access-Control-Allow-Origin"] = origin;
   }
 
-  // Handle OPTIONS request for CORS preflight
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: corsHeaders,
-      body: '',
-    };
+  return headers;
+}
+
+function response(
+  statusCode: number,
+  headers: Record<string, string>,
+  message: string,
+): APIGatewayProxyResult {
+  return {
+    statusCode,
+    headers,
+    body: JSON.stringify({ message }),
+  };
+}
+
+function defaultLog(requestId: string, outcome: string): void {
+  console.log(JSON.stringify({ requestId, outcome }));
+}
+
+async function getTurnstileSecret(): Promise<string> {
+  const now = Date.now();
+  if (secretCache && secretCache.expiresAt > now) {
+    return secretCache.value;
   }
+
+  const secret = await secretsClient.send(
+    new GetSecretValueCommand({ SecretId: TURNSTILE_SECRET_ID }),
+  );
+  const value = secret.SecretString;
+
+  if (!value) {
+    throw new Error("Turnstile secret is not configured");
+  }
+
+  secretCache = { value, expiresAt: now + SECRET_CACHE_MS };
+  return value;
+}
+
+async function verifyTurnstile(input: VerificationInput): Promise<TurnstileResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TURNSTILE_TIMEOUT_MS);
 
   try {
-    if (!fixedFromAddress) {
-      console.error("Configuration error: FIXED_FROM_ADDRESS environment variable is not set.");
-      return {
-        statusCode: 500,
-        headers: corsHeaders, // Add CORS headers
-        body: JSON.stringify({ message: "Internal server configuration error: Missing sender address." })
-      };
+    const body = new URLSearchParams({
+      secret: input.secret,
+      response: input.token,
+    });
+    if (input.remoteIp) {
+      body.set("remoteip", input.remoteIp);
     }
 
-    if (!event.body) {
-      return {
-        statusCode: 400,
-        headers: corsHeaders, // Add CORS headers
-        body: JSON.stringify({ message: "Request body is required" })
-      };
-    }
-
-    const emailRequest: EmailRequest = JSON.parse(event.body);
-    const validationError = validateEmailRequest(emailRequest);
-    
-    if (validationError) {
-      return {
-        statusCode: 400,
-        headers: corsHeaders, // Add CORS headers
-        body: JSON.stringify({ message: validationError })
-      };
-    }
-
-    const params = {
-      Destination: {
-        ToAddresses: emailRequest.to,
+    const verification = await fetch(
+      "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+        signal: controller.signal,
       },
-      Message: {
-        Body: {
-          Text: {
-            Data: emailRequest.body,
-          },
-        },
-        Subject: {
-          Data: emailRequest.subject,
-        },
-      },
-      Source: fixedFromAddress, // Use the fixed from address from env var
-    };
+    );
 
-    const command = new SendEmailCommand(params);
-    await sesClient.send(command);
-
-    return {
-      statusCode: 200,
-      headers: {
-        ...corsHeaders, // Spread CORS headers
-        'Content-Type': 'application/json' // Keep existing content type or add others
-      },
-      body: JSON.stringify({ 
-        message: "Email sent successfully",
-        to: emailRequest.to,
-        subject: emailRequest.subject
-      })
-    };
-  } catch (error) {
-    console.error("Error sending email:", error);
-    
-    if (error instanceof SyntaxError) {
-      return {
-        statusCode: 400,
-        headers: corsHeaders, // Add CORS headers
-        body: JSON.stringify({ 
-          message: "Invalid JSON in request body"
-        })
-      };
+    if (!verification.ok) {
+      throw new Error("Turnstile verification service failed");
     }
 
-    return {
-      statusCode: 500,
-      headers: corsHeaders, // Add CORS headers
-      body: JSON.stringify({ 
-        message: "Error sending email", 
-        error: error instanceof Error ? error.message : 'Unknown error'
-      })
-    };
+    return (await verification.json()) as TurnstileResult;
+  } finally {
+    clearTimeout(timeout);
   }
+}
+
+function emailBody(request: ContactRequest): string {
+  return [
+    "New contact form submission",
+    "",
+    `Name: ${request.name}`,
+    `Email: ${request.email}`,
+    `Phone: ${request.phone}`,
+    `Service interest: ${request.serviceInterest}`,
+    `Budget: ${request.budget}`,
+    `Source solution: ${request.sourceSolution || "general contact form"}`,
+    "",
+    "Project description:",
+    request.description,
+  ].join("\n");
+}
+
+async function sendEmail(request: ContactRequest): Promise<void> {
+  await sesClient.send(
+    new SendEmailCommand({
+      Destination: { ToAddresses: [FIXED_TO_ADDRESS] },
+      Message: {
+        Body: { Text: { Data: emailBody(request), Charset: "UTF-8" } },
+        Subject: {
+          Data: `Contact form: ${request.serviceInterest}`,
+          Charset: "UTF-8",
+        },
+      },
+      ReplyToAddresses: [request.email],
+      Source: FIXED_FROM_ADDRESS,
+    }),
+  );
+}
+
+const defaultDependencies: ContactDependencies = {
+  now: Date.now,
+  getTurnstileSecret,
+  verifyTurnstile,
+  sendEmail,
+  log: defaultLog,
 };
+
+export function createHandler(dependencies: ContactDependencies = defaultDependencies) {
+  return async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+    const requestId = event.requestContext?.requestId || "unknown";
+    const origin = event.headers?.origin || event.headers?.Origin;
+    const headers = corsHeaders(origin);
+
+    if (event.httpMethod === "OPTIONS") {
+      return { statusCode: 204, headers, body: "" };
+    }
+
+    if (event.httpMethod !== "POST" || !event.path.endsWith("/contact")) {
+      dependencies.log(requestId, "NOT_FOUND");
+      return response(404, headers, "Not found");
+    }
+
+    if (origin && !allowedOrigins.has(origin)) {
+      dependencies.log(requestId, "ORIGIN_REJECTED");
+      return response(403, headers, "Request rejected");
+    }
+
+    const contentType = event.headers?.["content-type"] || event.headers?.["Content-Type"];
+    if (!contentType?.toLowerCase().startsWith("application/json")) {
+      dependencies.log(requestId, "CONTENT_TYPE_REJECTED");
+      return response(400, headers, "Invalid request");
+    }
+
+    if (!event.body || Buffer.byteLength(event.body, "utf8") > MAX_REQUEST_BYTES) {
+      dependencies.log(requestId, "BODY_REJECTED");
+      return response(400, headers, "Invalid request");
+    }
+
+    let request: ContactRequest;
+    try {
+      request = parseContactRequest(JSON.parse(event.body));
+    } catch {
+      dependencies.log(requestId, "VALIDATION_REJECTED");
+      return response(400, headers, "Invalid request");
+    }
+
+    const formAge = dependencies.now() - request.formStartedAt;
+    if (request.website || (formAge >= 0 && formAge < MIN_FORM_AGE_MS)) {
+      dependencies.log(requestId, "BOT_SIGNAL_ACCEPTED");
+      return response(202, headers, "Request accepted");
+    }
+    if (formAge < 0 || formAge > MAX_FORM_AGE_MS) {
+      dependencies.log(requestId, "FORM_AGE_REJECTED");
+      return response(400, headers, "Invalid request");
+    }
+
+    try {
+      const secret = await dependencies.getTurnstileSecret();
+      const verification = await dependencies.verifyTurnstile({
+        secret,
+        token: request.turnstileToken,
+        remoteIp: event.requestContext?.identity?.sourceIp,
+      });
+
+      if (
+        !verification.success ||
+        verification.hostname !== TURNSTILE_ALLOWED_HOSTNAME ||
+        verification.action !== TURNSTILE_ACTION
+      ) {
+        dependencies.log(requestId, "TURNSTILE_REJECTED");
+        return response(422, headers, "Verification failed; please try again");
+      }
+
+      await dependencies.sendEmail(request);
+      dependencies.log(requestId, "CONTACT_SENT");
+      return response(202, headers, "Request accepted");
+    } catch {
+      dependencies.log(requestId, "PROVIDER_FAILED");
+      return response(502, headers, "Unable to process request; please try again");
+    }
+  };
+}
+
+export const handler = createHandler();
